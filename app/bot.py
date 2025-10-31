@@ -7,6 +7,8 @@ from redis import asyncio as aioredis
 from dotenv import load_dotenv
 
 from app.parser import parse_resume
+from app.analyzer import analyze_resume
+
 
 # === Настройки ===
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -57,6 +59,26 @@ async def handle_resume(message: Message):
     await redis.setex(user_key, 172800, text)
 
     await message.reply("✅ Резюме успешно обработано и сохранено.")
+    
+    
+@dp.message(F.text)
+async def handle_job_link(message: Message):
+    job_description = message.text
+
+    # Получаем текст резюме из Redis
+    user_key = f"resume:{message.from_user.id}"
+    resume_text = await redis.get(user_key)
+
+    if not resume_text:
+        await message.reply("⚠️ Резюме не найдено. Сначала отправьте своё резюме.")
+        return
+
+    await message.reply("🔍 Анализирую резюме и вакансию... это займёт пару минут.")
+    
+    result = analyze_resume(resume_text, job_description)
+
+    await message.reply(f"📊 Результаты анализа:\n\n{result}")
+
 
 
 # === Точка входа ===
