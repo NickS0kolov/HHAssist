@@ -1,8 +1,41 @@
-version: "3.8"
+version: "3.9"
+
 services:
+  bot:
+    build: .
+    container_name: hhassist-bot
+    restart: always
+    depends_on:
+      - redis
+      - ollama
+    env_file:
+      - .env
+    networks:
+      - hhassist-net
+
   redis:
-    image: redis:7.2-alpine
-    container_name: hhassist_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
+    image: redis:7
+    container_name: hhassist-redis
+    restart: always
+    networks:
+      - hhassist-net
+
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: hhassist-ollama
+    restart: always
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - hhassist-net
+    environment:
+      - NVIDIA_VISIBLE_DEVICE=all
+    runtime: nvidia
+
+networks:
+  hhassist-net:
+
+volumes:
+  ollama-data:

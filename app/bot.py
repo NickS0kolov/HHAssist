@@ -4,10 +4,11 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message
 from aiogram.fsm.storage.redis import RedisStorage
 from redis import asyncio as aioredis
+import re
 from dotenv import load_dotenv
 
-from app.parser import parse_resume
-from app.analyzer import analyze_resume
+from .parser import parse_resume, job_description_from_link
+from .analyzer import analyze_resume, analyze_message
 
 
 # === Настройки ===
@@ -28,14 +29,17 @@ if not BOT_TOKEN:
     raise ValueError("❌ TELEGRAM_BOT_TOKEN не найден в .env")
 
 # === Redis (асинхронный) ===
-# Если бот запущен на ПК, а Redis в Docker — оставь localhost
-# Если оба в Docker — используй host="redis"
+
 REDIS_URL = os.getenv("REDIS_URL")
 redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 storage = RedisStorage(redis)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=storage)
 
+
+@dp.message(F.text == "/start")
+async def start(message: Message):
+    await message.answer("Привет! Я - HR Bot. Отправь мне свое резюме (PDF, DOCX)")
 
 # === Обработка файлов ===
 @dp.message(F.document)
@@ -58,13 +62,21 @@ async def handle_resume(message: Message):
     user_key = f"resume:{message.from_user.id}"
     await redis.setex(user_key, 172800, text)
 
-    await message.reply("✅ Резюме успешно обработано и сохранено.")
-    
-    
-@dp.message(F.text)
-async def handle_job_link(message: Message):
-    job_description = message.text
+    try:
+        os.remove(file_path)
+    except Exception as e:
+        print(f"Не удалось удалить файл {file_path}: {e}")
 
+    await message.reply("✅ Резюме успешно обработано и сохранено.")
+
+URL_REGEX = re.compile(
+    r"(https?://[^\s]+)"
+)
+
+@dp.message(F.text.regexp(URL_REGEX))
+async def handle_link(message: Message):
+    url = message.text.strip()
+    
     # Получаем текст резюме из Redis
     user_key = f"resume:{message.from_user.id}"
     resume_text = await redis.get(user_key)
@@ -73,9 +85,42 @@ async def handle_job_link(message: Message):
         await message.reply("⚠️ Резюме не найдено. Сначала отправьте своё резюме.")
         return
 
-    await message.reply("🔍 Анализирую резюме и вакансию... это займёт пару минут.")
+    await message.reply("🔗 Обнаружена ссылка! Анализирую содержимое...")
+
+    job_text = job_description_from_link(url)
+
+    if job_text:
+        job_key = f"job:{message.from_user.id}"
+        await redis.setex(job_key, 172800, job_text)
+        await message.reply("✅ Вакансия успешно сохранена и уже анализируется!")
+        result = analyze_resume(resume_text, job_text)
+        await message.reply(f"📊 Результаты анализа:\n\n{result}")
+    else:
+        await message.reply("❌ Не удалось извлечь информацию из ссылки.")
+
+
+@dp.message(F.text)
+async def handle_massage(message: Message):
+    message_text = message.text
+
+    # Получаем текст резюме из Redis
+    user_key = f"resume:{message.from_user.id}"
+    resume_text = await redis.get(user_key)
+
+    job_key = f"job:{message.from_user.id}"
+    job_text = await redis.get(job_key)
+
+    if not resume_text:
+        await message.reply("⚠️ Резюме не найдено. Сначала отправьте своё резюме.")
+        return
     
-    result = analyze_resume(resume_text, job_description)
+    if not job_text:
+        await message.reply("⚠️ Вакансия не найдена. Будет анализироваться только резюме.")
+        job_text = ""
+
+    await message.reply("🔍 Анализирую вопрос.. это займёт пару минут.")
+    
+    result = analyze_message(resume_text, job_text, message_text)
 
     await message.reply(f"📊 Результаты анализа:\n\n{result}")
 
