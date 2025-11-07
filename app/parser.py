@@ -4,6 +4,7 @@ import docx
 import requests
 from bs4 import BeautifulSoup
 import re
+from urllib.parse import urlparse
 
 def extract_text_from_pdf(file_path: str) -> str:
     """Извлекает текст из PDF файла"""
@@ -37,12 +38,7 @@ def parse_resume(file_path: str) -> str:
     else:
         raise ValueError("Неподдерживаемый формат файла")
 
-
 def job_description_from_link(url: str) -> str:
-    """
-    Получает и возвращает текст описания вакансии по ссылке (hh.ru или linkedin.com).
-    Возвращает уже очищенный, читаемый текст.
-    """
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -51,36 +47,25 @@ def job_description_from_link(url: str) -> str:
         )
     }
 
+    domain = urlparse(url).netloc.lower()
+
+    # Проверяем, что это именно hh.ru (и поддомены)
+    if not (domain.endswith("hh.ru") or domain.endswith("hh.kz") or domain.endswith("hh.ua")):
+        return "NotHH"
+
     try:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
     except requests.RequestException as e:
-        return f"⚠️ Ошибка запроса: {e}"
+        return "Ошибка_запроса"
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    text = None
+    desc_block = soup.find("div", {"data-qa": "vacancy-description"})
+    if not desc_block:
+        return None
 
-    # --- HH.RU ---
-    if "hh.ru" in url:
-        desc_block = soup.find("div", {"data-qa": "vacancy-description"})
-        if desc_block:
-            text = desc_block.get_text(separator="\n", strip=True)
-
-    # --- LINKEDIN ---
-    elif "linkedin.com" in url:
-        desc_block = soup.find("div", class_=re.compile(r"show-more-less-html__markup"))
-        if desc_block:
-            text = desc_block.get_text(separator="\n", strip=True)
-
-    # --- Неизвестный сайт ---
-    else:
-        return "⚠️ Неизвестный источник вакансии. Поддерживаются hh.ru и linkedin.com."
-
-    if not text:
-        return "⚠️ Не удалось извлечь описание вакансии (страница может требовать авторизацию)."
-
-    # Очистка текста
+    text = desc_block.get_text(separator="\n", strip=True)
     text = _clean_text(text)
     return text
 

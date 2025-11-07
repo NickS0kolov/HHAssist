@@ -114,6 +114,14 @@ async def process_link(task: Dict):
     loop = asyncio.get_running_loop()
     job_text = await loop.run_in_executor(None, job_description_from_link, url)
 
+    if job_text == 'NotHH':
+        await safe_send(user_id, "⚠️ Неизвестный источник вакансии. Поддерживаются hh.ru")
+        return
+
+    if job_text == 'Ошибка_запроса':
+        await safe_send(user_id, "⚠️ Не удалось сделать запрос.")
+        return
+
     if not job_text:
         await safe_send(user_id, "❌ Не удалось извлечь текст вакансии.")
         return
