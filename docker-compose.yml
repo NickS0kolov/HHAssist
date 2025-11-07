@@ -30,9 +30,6 @@ services:
       - ollama-data:/root/.ollama
     networks:
       - hhassist-net
-    environment:
-      - NVIDIA_VISIBLE_DEVICE=all
-    runtime: nvidia
 
 networks:
   hhassist-net:
