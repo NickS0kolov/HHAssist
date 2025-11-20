@@ -132,7 +132,7 @@ async def process_link(task: Dict):
     resume_text = await redis.get(f"resume:{user_id}")
     if resume_text:
         await safe_send(user_id, "🤖 Анализирую соответствие резюме и вакансии...")
-        result = await analyze_resume(resume_text, job_text)
+        result = await analyze_resume(resume_text, user_id)
         await safe_send(user_id, f"🏁 Результат анализа:\n\n{result}")
 
 # === Обработка текстовых сообщений ===
@@ -143,13 +143,12 @@ async def process_message(task: Dict):
     await safe_send(user_id, "💬 Анализирую ваш вопрос...")
 
     resume_text = await redis.get(f"resume:{user_id}")
-    job_text = await redis.get(f"job:{user_id}") or ""
 
     if not resume_text:
         await safe_send(user_id, "📎 Резюме не найдено. Пожалуйста, сначала загрузите его.")
         return
 
-    result = await analyze_message(resume_text, job_text, message_text)
+    result = await analyze_message(resume_text, user_id, message_text)
     await safe_send(user_id, f"Ответ:\n\n{result}")
 
 # === Хендлеры ===
