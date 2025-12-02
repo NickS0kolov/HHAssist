@@ -40,6 +40,7 @@ class VacancyText(BaseModel):
 llm_tools = [
     StructuredTool.from_function(
         func=_get_vacancy_text,
+        coroutine=_get_vacancy_text,
         name="VacancyText",
         args_schema=VacancyText,
         description="Получение актуального текста вакансии"
@@ -53,18 +54,18 @@ tool_map = {
 
 
 # === Исполнитель инструментов ===
-def tool_executor(state: AgentState) -> dict:
+async def tool_executor(state: AgentState) -> dict:
     tool_calls = state["messages"][-1].tool_calls
     tool_messages = []
 
-    user_id = state.user_id
+    user_id = state['user_id']
 
     for call in tool_calls:
         tool_name = call["name"]
         tool_func = tool_map[tool_name]
 
         # Функция не требуют аргументов кроме user_id
-        response = tool_func(user_id=user_id)
+        response = await tool_func(user_id=user_id)
 
         tool_messages.append(
             ToolMessage(
